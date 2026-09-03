@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Sun, Moon, Menu, X, Search, CloudLightning, Home, MessageSquare, LayoutDashboard, BellAlert } from 'lucide-react';
+import { Sun, Moon, Menu, X, Search, CloudLightning, Home, MessageSquare, LayoutDashboard, Bell } from 'lucide-react';
 
 const Navbar = ({ darkMode, setDarkMode }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -20,7 +20,7 @@ const Navbar = ({ darkMode, setDarkMode }) => {
     { to: '/', label: 'Home', icon: Home },
     { to: '/chat', label: 'Chat', icon: MessageSquare },
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/alerts', label: 'Alerts', icon: BellAlert },
+    { to: '/alerts', label: 'Alerts', icon: Bell },
   ];
 
   return (

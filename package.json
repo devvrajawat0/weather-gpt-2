@@ -1,0 +1,19 @@
+{
+  "name": "weathergpt",
+  "version": "1.0.0",
+  "description": "WeatherGPT: Conversational AI for Weather Forecasting, Alerts, and Climate Information - SIH26068",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm run dev",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "build": "cd client && npm run build",
+    "start": "cd server && npm start"
+  },
+  "keywords": ["weather", "ai", "chatbot", "sih", "hackathon"],
+  "author": "Team WeatherGPT",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

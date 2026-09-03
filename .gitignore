@@ -1,0 +1,14 @@
+node_modules/
+client/node_modules/
+server/node_modules/
+.env
+dist/
+client/dist/
+build/
+*.db
+*.json_data
+weathergpt_data.json
+tunnel_url.txt
+cloudflared.exe
+.DS_Store
+*.log

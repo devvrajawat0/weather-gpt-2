@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, LocationItem } from '../types';
-import { sendChatMessage } from '../services/api';
+import { sendChatMessage, searchLocations } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
-import { Send, Mic, MicOff, Bot, User, Sparkles, Volume2, RotateCcw, Loader2, MapPin, ArrowRight } from 'lucide-react';
+import { Send, Mic, MicOff, Bot, User, Sparkles, Volume2, RotateCcw, Loader2, MapPin, ArrowRight, Building2, Globe2 } from 'lucide-react';
 
 interface ChatViewProps {
   currentLocation: LocationItem | null;
@@ -16,11 +16,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialProm
     {
       id: 'welcome-1',
       role: 'assistant',
-      content: `Hello! I am **WeatherGPT** 🌤️, your conversational weather assistant.\n\nYou can ask me natural language questions for any city worldwide, like:\n- *"Will it rain in Gwalior tomorrow?"*\n- *"What is the weather in Agra today?"*\n- *"Compare Gwalior and Bhopal"*\n- *"What should I wear in Manali today?"*\n- *"Agricultural weather advice for Punjab farmers"*`,
+      content: `Hello! I am **WeatherGPT** 🌤️, your conversational weather assistant.\n\nYou can ask me natural language questions for any district of India or world capital, like:\n- *"Will it rain in Gwalior tomorrow?"*\n- *"What is the weather in Agra today?"*\n- *"Compare Gwalior and Bhopal"*\n- *"What should I wear in Manali today?"*\n- *"Agricultural weather advice for Punjab farmers"*`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
   const [input, setInput] = useState('');
+  const [suggestions, setSuggestions] = useState<LocationItem[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -40,6 +42,33 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialProm
       handleSend(initialPrompt);
     }
   }, [initialPrompt]);
+
+  // Live Input Autocomplete Search
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchSuggestions = async () => {
+      const text = input.trim();
+      if (text.length >= 2) {
+        try {
+          const results = await searchLocations(text);
+          if (!isCancelled) {
+            setSuggestions(results.slice(0, 5));
+            setShowSuggestions(results.length > 0);
+          }
+        } catch (e) {
+          setSuggestions([]);
+        }
+      } else {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    };
+
+    fetchSuggestions();
+    return () => {
+      isCancelled = true;
+    };
+  }, [input]);
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -96,6 +125,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialProm
     const msgText = textToSend || input;
     if (!msgText.trim() || isSending) return;
 
+    setShowSuggestions(false);
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -152,7 +182,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialProm
   };
 
   return (
-    <div className="max-w-4xl mx-auto h-[calc(100vh-160px)] flex flex-col glass-panel rounded-3xl border border-slate-700/60 shadow-2xl overflow-hidden">
+    <div className="max-w-4xl mx-auto h-[calc(100vh-160px)] flex flex-col glass-panel rounded-3xl border border-slate-700/60 shadow-2xl overflow-hidden relative">
       
       {/* Header Bar */}
       <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
@@ -164,11 +194,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialProm
             <h2 className="text-base font-extrabold text-white flex items-center gap-2">
               WeatherGPT Conversational AI
               <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                100% City Coverage
+                700+ Districts & Capitals
               </span>
             </h2>
             <p className="text-xs text-slate-400">
-              Natural Language Weather Assistant • All Districts & Global Geocoding
+              Natural Language Weather Assistant • All Indian Districts & Global Capitals
             </p>
           </div>
         </div>
@@ -266,32 +296,86 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialProm
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Suggested Prompts Banner */}
-      <div className="px-4 py-2 border-t border-slate-800 bg-slate-900/40 flex items-center gap-2 overflow-x-auto text-xs whitespace-nowrap">
-        <Sparkles className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-        <span className="text-slate-400 font-semibold">Try:</span>
-        <button
-          onClick={() => handleSend("Will it rain in Bhopal tomorrow?")}
-          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-        >
-          Will it rain in Bhopal tomorrow?
-        </button>
-        <button
-          onClick={() => handleSend("Compare weather in Delhi and Tokyo")}
-          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-        >
-          Compare Delhi & Tokyo
-        </button>
-        <button
-          onClick={() => handleSend("What should I wear in Manali today?")}
-          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-        >
-          Clothing advice for Manali
-        </button>
+      {/* District & Capital Suggestion Chips Banner */}
+      <div className="px-4 py-2.5 border-t border-slate-800 bg-slate-900/60 flex flex-col gap-2 text-xs">
+        <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1 scrollbar-thin">
+          <div className="flex items-center gap-1 text-cyan-400 font-bold text-[11px] uppercase tracking-wider flex-shrink-0">
+            <Building2 className="w-3.5 h-3.5" /> Indian Districts:
+          </div>
+          {['Gwalior', 'Manali', 'Wayanad', 'Jaipur', 'Shimla', 'Indore', 'Visakhapatnam', 'Leh'].map((dst) => (
+            <button
+              key={dst}
+              onClick={() => handleSend(`weather in ${dst}`)}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-cyan-600/30 hover:border-cyan-500/50 text-slate-300 hover:text-white border border-slate-700 transition"
+            >
+              📍 {dst}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-thin">
+          <div className="flex items-center gap-1 text-amber-400 font-bold text-[11px] uppercase tracking-wider flex-shrink-0">
+            <Globe2 className="w-3.5 h-3.5" /> World Capitals:
+          </div>
+          {['Tokyo', 'London', 'Paris', 'Washington D.C.', 'Berlin', 'Ottawa', 'Canberra'].map((cap) => (
+            <button
+              key={cap}
+              onClick={() => handleSend(`weather in ${cap}`)}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-amber-600/30 hover:border-amber-500/50 text-slate-300 hover:text-white border border-slate-700 transition"
+            >
+              🌍 {cap}
+            </button>
+          ))}
+          <button
+            onClick={() => handleSend("Compare Gwalior and Bhopal")}
+            className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-cyan-600/30 to-blue-600/30 hover:from-cyan-500/40 hover:to-blue-500/40 text-cyan-200 border border-cyan-500/40 transition font-semibold"
+          >
+            ⚔️ Compare Gwalior & Bhopal
+          </button>
+        </div>
       </div>
 
+      {/* Live Autocomplete Suggestions Floating Dropdown */}
+      {showSuggestions && suggestions.length > 0 && (
+        <div className="absolute bottom-20 left-4 right-4 z-50 bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700 shadow-2xl overflow-hidden p-2 max-h-48 overflow-y-auto space-y-1">
+          <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between border-b border-slate-800">
+            <span>District & Capital Suggestions</span>
+            <span>Click to Query</span>
+          </div>
+          {suggestions.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => {
+                const queryText = `weather in ${item.name}`;
+                setInput(queryText);
+                setShowSuggestions(false);
+                handleSend(queryText);
+              }}
+              className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-800 transition flex items-center justify-between group"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-cyan-400 group-hover:scale-110 transition-transform">
+                  {item.type === 'capital' ? '🌍' : '📍'}
+                </span>
+                <div>
+                  <span className="text-sm font-semibold text-white group-hover:text-cyan-300">
+                    {item.name}
+                  </span>
+                  <span className="text-xs text-slate-400 ml-2">
+                    {item.state ? item.state : item.country ? item.country : ''}
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 uppercase">
+                {item.type}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Input Box Bar */}
-      <div className="p-4 bg-slate-900/80 border-t border-slate-800">
+      <div className="p-4 bg-slate-900/90 border-t border-slate-800">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -318,7 +402,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialProm
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={isListening ? "Listening... speak now!" : "Ask WeatherGPT any weather question..."}
+            onFocus={() => {
+              if (suggestions.length > 0) setShowSuggestions(true);
+            }}
+            placeholder={isListening ? "Listening... speak now!" : "Type district or capital name (e.g. Gwalior, Tokyo, Jaipur)..."}
             className="flex-1 bg-slate-950/90 text-white placeholder-slate-500 text-sm rounded-2xl px-4 py-3 border border-slate-700/80 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30 transition"
           />
 

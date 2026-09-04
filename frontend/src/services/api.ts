@@ -449,24 +449,65 @@ export async function fetchAlerts(state?: string, country?: string): Promise<{ s
   return { success: true, alerts: allAlerts };
 }
 
+const ALIASES: Record<string, string> = {
+  'delhi': 'new delhi',
+  'bangalore': 'bengaluru',
+  'bombay': 'mumbai',
+  'calcutta': 'kolkata',
+  'madras': 'chennai',
+  'gurgaon': 'gurugram',
+  'trivandrum': 'thiruvananthapuram',
+  'pondicherry': 'puducherry',
+  'cochin': 'kochi',
+  'baroda': 'vadodara',
+  'banaras': 'varanasi',
+  'kashi': 'varanasi'
+};
+
 export function findLocationsInText(text: string): LocationItem[] {
   const queryLower = text.toLowerCase();
   const matched: LocationItem[] = [];
 
   const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  const checkMatch = (phrase: string) => {
+  const checkPhraseInQuery = (phrase: string) => {
     if (!phrase || phrase.length < 3) return false;
     const pattern = new RegExp(`\\b${escapeRegExp(phrase.toLowerCase())}\\b`, 'i');
-    return pattern.test(queryLower);
+    if (pattern.test(queryLower)) return true;
+    
+    for (const [alias, canonical] of Object.entries(ALIASES)) {
+      if (phrase.toLowerCase().includes(canonical) && new RegExp(`\\b${escapeRegExp(alias)}\\b`, 'i').test(queryLower)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const getVariations = (rawName: string) => {
+    const variations = [rawName];
+    const cleanMain = rawName.split('(')[0].trim();
+    variations.push(cleanMain);
+
+    if (rawName.includes('(')) {
+      const insideParen = rawName.split('(')[1].replace(')', '').trim();
+      variations.push(insideParen);
+      insideParen.split('&').forEach(part => variations.push(part.trim()));
+      insideParen.split(' ').forEach(part => variations.push(part.trim()));
+    }
+
+    const prefixes = ['new', 'old', 'north', 'south', 'east', 'west', 'central'];
+    const parts = cleanMain.split(' ');
+    if (parts.length > 1 && prefixes.includes(parts[0].toLowerCase())) {
+      variations.push(parts.slice(1).join(' '));
+    }
+
+    return variations.filter(v => v && v.length >= 3);
   };
 
   // 1. Check Indian districts & cities
   for (const d of INDIAN_DISTRICTS) {
-    const mainName = d.name.split('(')[0].trim();
-    const parenName = d.name.includes('(') ? d.name.split('(')[1].replace(')', '').trim() : '';
-
-    if (checkMatch(mainName) || (parenName && checkMatch(parenName))) {
+    const variations = getVariations(d.name);
+    if (variations.some(v => checkPhraseInQuery(v))) {
       if (!matched.some(m => m.id === d.id)) {
         matched.push(d);
       }
@@ -475,10 +516,8 @@ export function findLocationsInText(text: string): LocationItem[] {
 
   // 2. Check World Capitals
   for (const c of WORLD_CAPITALS) {
-    const mainName = c.name.split('(')[0].trim();
-    const parenName = c.name.includes('(') ? c.name.split('(')[1].replace(')', '').trim() : '';
-
-    if (checkMatch(mainName) || (parenName && checkMatch(parenName))) {
+    const variations = getVariations(c.name);
+    if (variations.some(v => checkPhraseInQuery(v))) {
       if (!matched.some(m => m.id === c.id)) {
         matched.push(c);
       }
@@ -488,7 +527,7 @@ export function findLocationsInText(text: string): LocationItem[] {
   // 3. Check State / Country names if no direct district matched
   if (matched.length === 0) {
     for (const d of INDIAN_DISTRICTS) {
-      if (d.state && checkMatch(d.state)) {
+      if (d.state && checkPhraseInQuery(d.state)) {
         if (!matched.some(m => m.id === d.id)) {
           matched.push(d);
           break;
@@ -499,7 +538,7 @@ export function findLocationsInText(text: string): LocationItem[] {
 
   if (matched.length === 0) {
     for (const c of WORLD_CAPITALS) {
-      if (c.country && checkMatch(c.country)) {
+      if (c.country && checkPhraseInQuery(c.country)) {
         if (!matched.some(m => m.id === c.id)) {
           matched.push(c);
           break;

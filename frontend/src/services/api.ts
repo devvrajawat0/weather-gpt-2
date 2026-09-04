@@ -449,6 +449,68 @@ export async function fetchAlerts(state?: string, country?: string): Promise<{ s
   return { success: true, alerts: allAlerts };
 }
 
+export function findLocationsInText(text: string): LocationItem[] {
+  const queryLower = text.toLowerCase();
+  const matched: LocationItem[] = [];
+
+  const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const checkMatch = (phrase: string) => {
+    if (!phrase || phrase.length < 3) return false;
+    const pattern = new RegExp(`\\b${escapeRegExp(phrase.toLowerCase())}\\b`, 'i');
+    return pattern.test(queryLower);
+  };
+
+  // 1. Check Indian districts & cities
+  for (const d of INDIAN_DISTRICTS) {
+    const mainName = d.name.split('(')[0].trim();
+    const parenName = d.name.includes('(') ? d.name.split('(')[1].replace(')', '').trim() : '';
+
+    if (checkMatch(mainName) || (parenName && checkMatch(parenName))) {
+      if (!matched.some(m => m.id === d.id)) {
+        matched.push(d);
+      }
+    }
+  }
+
+  // 2. Check World Capitals
+  for (const c of WORLD_CAPITALS) {
+    const mainName = c.name.split('(')[0].trim();
+    const parenName = c.name.includes('(') ? c.name.split('(')[1].replace(')', '').trim() : '';
+
+    if (checkMatch(mainName) || (parenName && checkMatch(parenName))) {
+      if (!matched.some(m => m.id === c.id)) {
+        matched.push(c);
+      }
+    }
+  }
+
+  // 3. Check State / Country names if no direct district matched
+  if (matched.length === 0) {
+    for (const d of INDIAN_DISTRICTS) {
+      if (d.state && checkMatch(d.state)) {
+        if (!matched.some(m => m.id === d.id)) {
+          matched.push(d);
+          break;
+        }
+      }
+    }
+  }
+
+  if (matched.length === 0) {
+    for (const c of WORLD_CAPITALS) {
+      if (c.country && checkMatch(c.country)) {
+        if (!matched.some(m => m.id === c.id)) {
+          matched.push(c);
+          break;
+        }
+      }
+    }
+  }
+
+  return matched;
+}
+
 export async function sendChatMessage(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   currentLocation?: LocationItem | null
@@ -470,23 +532,146 @@ export async function sendChatMessage(
   const lastUserMsg = messages[messages.length - 1]?.content || "";
   const queryLower = lastUserMsg.toLowerCase();
 
-  const targetLoc = currentLocation || INDIAN_DISTRICTS.find(d => d.name.includes("Bhopal")) || INDIAN_DISTRICTS[0];
-  const wData = await fetchDirectOpenMeteo(targetLoc.lat, targetLoc.lon);
+  // Extract target locations mentioned in user prompt
+  let targetLocations = findLocationsInText(lastUserMsg);
 
-  const pLoc = `${targetLoc.name}${targetLoc.state ? ', ' + targetLoc.state : ''}`;
-  const pCurr = wData.current;
-  const pAqi = wData.aqi;
-  const pDaily = wData.daily;
+  // Fallback to active UI location or default to Bhopal if no location mentioned in prompt
+  if (targetLocations.length === 0) {
+    if (currentLocation && currentLocation.lat && currentLocation.lon) {
+      targetLocations.push(currentLocation);
+    } else {
+      const bhopal = INDIAN_DISTRICTS.find(d => d.name.includes("Bhopal")) || INDIAN_DISTRICTS[0];
+      targetLocations.push(bhopal);
+    }
+  }
+
+  // Fetch real-time live Open-Meteo weather data for matched locations (up to 2 for comparisons)
+  const weatherContexts: Array<{ location: string; locObj: LocationItem; weather: WeatherData }> = [];
+  for (const loc of targetLocations.slice(0, 2)) {
+    try {
+      const wData = await fetchDirectOpenMeteo(loc.lat, loc.lon);
+      const locLabel = loc.name + (loc.state ? `, ${loc.state}` : loc.country ? `, ${loc.country}` : '');
+      weatherContexts.push({
+        location: locLabel,
+        locObj: loc,
+        weather: wData
+      });
+    } catch (err) {
+      console.warn(`Could not fetch live weather context for ${loc.name}:`, err);
+    }
+  }
+
+  if (weatherContexts.length === 0) {
+    return {
+      reply: "⚠️ I couldn't fetch live weather data for the specified location right now. Please try searching for a district in India (e.g. Bhopal, Manali, Jaipur, Delhi) or a world capital (e.g. Tokyo, Paris).",
+      locations: [],
+      weatherData: []
+    };
+  }
+
+  const primary = weatherContexts[0];
+  const pLoc = primary.location;
+  const pCurr = primary.weather.current;
+  const pAqi = primary.weather.aqi;
+  const pDaily = primary.weather.daily;
 
   let reply = "";
-  if (queryLower.includes('rain') || queryLower.includes('precipitation') || queryLower.includes('umbrella')) {
+
+  // Scenario A: Multi-location comparison (e.g. "Compare weather in Delhi and Tokyo")
+  if (weatherContexts.length >= 2) {
+    const sec = weatherContexts[1];
+    const sLoc = sec.location;
+    const sCurr = sec.weather.current;
+    const sAqi = sec.weather.aqi;
+
+    const tempDiff = (pCurr.temp - sCurr.temp).toFixed(1);
+    const warmerLoc = pCurr.temp > sCurr.temp ? pLoc : sLoc;
+
+    reply = `### 🌤️ Weather Comparison: **${pLoc}** vs **${sLoc}**
+
+Here is the real-time weather comparison between **${pLoc}** and **${sLoc}**:
+
+| Weather Parameter | ${pLoc} | ${sLoc} |
+| :--- | :--- | :--- |
+| **Current Temperature** | **${pCurr.temp}°C** (Feels like ${pCurr.feelsLike}°C) | **${sCurr.temp}°C** (Feels like ${sCurr.feelsLike}°C) |
+| **Condition** | ${pCurr.condition} | ${sCurr.condition} |
+| **Humidity** | ${pCurr.humidity}% | ${sCurr.humidity}% |
+| **Wind Speed** | ${pCurr.windSpeed} km/h | ${sCurr.windSpeed} km/h |
+| **Air Quality (AQI)** | ${pAqi.usAqi} (${pAqi.label}) | ${sAqi.usAqi} (${sAqi.label}) |
+| **Precipitation** | ${pCurr.precipitation} mm | ${sCurr.precipitation} mm |
+
+#### 📊 Key Insights & Recommendation:
+- **Temperature Difference**: **${warmerLoc}** is currently warmer by **${Math.abs(Number(tempDiff))}°C**.
+- **Travel & Comfort**: ${pCurr.temp > 30 ? `Stay hydrated in ${pLoc} as conditions are warm.` : `Enjoy pleasant weather in ${pLoc}.`}
+- **Air Quality**: ${pAqi.usAqi > 150 ? `⚠️ Outdoor mask advised in ${pLoc} due to elevated AQI (${pAqi.usAqi}).` : `Air quality is safe.`}`;
+  }
+  // Scenario B: Rain / Precipitation query
+  else if (queryLower.includes('rain') || queryLower.includes('precipitation') || queryLower.includes('umbrella') || queryLower.includes('shower')) {
     const rainToday = pDaily[0]?.precipProbability || 0;
     const rainTomorrow = pDaily[1]?.precipProbability || 0;
 
-    reply = `### 🌧️ Rain Forecast for **${pLoc}**\n\n- **Current Condition**: ${pCurr.condition} (${pCurr.precipitation} mm rain recorded).\n- **Today's Rain Chance**: **${rainToday}%** (Max Temp: ${pDaily[0]?.maxTemp}°C).\n- **Tomorrow's Rain Chance**: **${rainTomorrow}%** (Max Temp: ${pDaily[1]?.maxTemp}°C).\n\n#### 🎒 Advice:\n${rainToday > 40 || rainTomorrow > 40 ? `- ☔ **Umbrella Recommended**: Rain expected. Drive carefully.` : `- ☀️ Low risk of rain today.`}`;
-  } else {
-    reply = `### 🌤️ Weather Overview for **${pLoc}**\n\nCurrently in **${pLoc}**, it is **${pCurr.temp}°C** with **${pCurr.condition}**.\n\n#### 📊 Quick Weather Breakdown:\n- **Temperature**: Current **${pCurr.temp}°C** | High: **${pDaily[0]?.maxTemp}°C** | Low: **${pDaily[0]?.minTemp}°C** (Feels like ${pCurr.feelsLike}°C)\n- **Air Quality (AQI)**: **${pAqi.usAqi}** (${pAqi.label})\n- **Wind & Pressure**: ${pCurr.windSpeed} km/h | Pressure: ${pCurr.pressure} hPa\n\n#### 💡 Clothing Tip:\n- ${pCurr.temp > 30 ? "Light cotton clothes recommended." : pCurr.temp < 18 ? "Jacket or sweater advised." : "Casual comfortable attire."}`;
+    reply = `### 🌧️ Rain Forecast for **${pLoc}**
+
+- **Current Condition**: ${pCurr.condition} with **${pCurr.precipitation} mm** recorded rain.
+- **Today's Rain Chance**: **${rainToday}%** (Max Temp: ${pDaily[0]?.maxTemp}°C).
+- **Tomorrow's Rain Chance**: **${rainTomorrow}%** (Max Temp: ${pDaily[1]?.maxTemp}°C).
+
+#### 🎒 Travel & Clothing Advice:
+${rainToday > 40 || rainTomorrow > 40 
+  ? `- ☔ **Umbrella Recommended**: Rain expected in ${pLoc}. Carry rain gear and drive carefully on wet roads.`
+  : `- ☀️ **Low Rain Risk**: Rain is unlikely today in ${pLoc}. Good conditions for outdoor travel.`}
+${pAqi.usAqi > 100 ? `- 😷 **Air Quality**: AQI is ${pAqi.usAqi} (${pAqi.label}). Sensitive groups should take precautions.` : ''}`;
+  }
+  // Scenario C: Agriculture / Farmer advice query
+  else if (queryLower.includes('farm') || queryLower.includes('agri') || queryLower.includes('crop') || queryLower.includes('irrigation')) {
+    const rainSum = pDaily.slice(0, 5).reduce((acc, d) => acc + (d.precipitationSum || 0), 0).toFixed(1);
+
+    reply = `### 🌾 Agricultural Weather Advisory for **${pLoc}**
+
+- **Current Temp**: ${pCurr.temp}°C (Feels like ${pCurr.feelsLike}°C)
+- **Relative Humidity**: ${pCurr.humidity}%
+- **Wind Speed**: ${pCurr.windSpeed} km/h
+- **5-Day Rain Summary**: ${rainSum} mm accumulated rain expected.
+
+#### 🚜 Farming & Field Management Guidance:
+1. **Irrigation Schedule**: ${pDaily[0]?.precipProbability > 50 ? "Postpone artificial irrigation as rainfall is expected today." : "Regular irrigation schedule can proceed early morning or late evening."}
+2. **Pesticide Spraying**: ${pCurr.windSpeed > 20 ? `⚠️ Avoid spraying pesticides today due to high wind speeds (${pCurr.windSpeed} km/h).` : "Wind conditions are suitable for pesticide and fertilizer application."}
+3. **Crop Management**: ${pDaily[1]?.precipProbability > 60 ? "Protect harvested crops in dry storage to prevent rain damage." : "Weather is suitable for field activities and harvesting."}`;
+  }
+  // Scenario D: Clothing / Outfit query
+  else if (queryLower.includes('wear') || queryLower.includes('cloth') || queryLower.includes('outfit') || queryLower.includes('jacket') || queryLower.includes('dress')) {
+    reply = `### 👕 Clothing & Outfit Advice for **${pLoc}**
+
+Currently in **${pLoc}**, it is **${pCurr.temp}°C** (${pCurr.condition}).
+
+#### 👔 What to Wear Today:
+- **Primary Clothing**: ${pCurr.temp >= 30 ? "☀️ Light, breathable cotton clothing." : pCurr.temp <= 18 ? "🧥 Layer up with a jacket, sweater, or fleece." : "👕 Comfortable casual attire (t-shirt & light pants)."}
+- **Sun Protection**: ${pCurr.uvIndex >= 6 ? "🧢 High UV Index. Wear sunscreen and sunglasses." : "UV levels are low to moderate."}
+- **Weather Protection**: ${pCurr.precipitation > 0 || (pDaily[0]?.precipProbability || 0) > 40 ? "☔ Carry a compact umbrella or raincoat." : "No rain protection required."}`;
+  }
+  // Scenario E: General Weather Overview & Forecast
+  else {
+    const today = pDaily[0] || {};
+    const tomorrow = pDaily[1] || {};
+
+    reply = `### 🌤️ Weather Overview for **${pLoc}**
+
+Currently in **${pLoc}**, it is **${pCurr.temp}°C** with **${pCurr.condition}**.
+
+#### 📊 Quick Weather Breakdown:
+- **Temperature**: Current **${pCurr.temp}°C** | High: **${today.maxTemp}°C** | Low: **${today.minTemp}°C** (Feels like ${pCurr.feelsLike}°C)
+- **Air Quality (AQI)**: **${pAqi.usAqi}** (${pAqi.label}) ${pAqi.usAqi > 150 ? '⚠️ Unhealthy' : '✅ Safe'}
+- **Wind & Pressure**: ${pCurr.windSpeed} km/h | Pressure: ${pCurr.pressure} hPa
+- **Tomorrow's Forecast**: ${tomorrow.condition} with High of **${tomorrow.maxTemp}°C**, Low of **${tomorrow.minTemp}°C** (${tomorrow.precipProbability}% rain probability).
+
+#### 💡 Smart Tips:
+- **Clothing**: ${pCurr.temp > 30 ? "Lightweight, breathable cotton clothes are ideal." : pCurr.temp < 18 ? "Warm jacket or sweater recommended." : "Comfortable casual clothing."}
+- **Outdoors**: ${pCurr.uvIndex >= 6 ? "☀️ High UV Index (" + pCurr.uvIndex + "). Wear sunscreen and sunglasses." : "UV Index is moderate."}`;
   }
 
-  return { reply, locations: [targetLoc], weatherData: [{ name: pLoc, current: pCurr, aqi: pAqi }] };
+  return {
+    reply,
+    locations: weatherContexts.map(w => w.locObj),
+    weatherData: weatherContexts.map(w => ({ name: w.location, current: w.weather.current, aqi: w.weather.aqi }))
+  };
 }

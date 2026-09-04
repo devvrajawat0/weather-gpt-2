@@ -19,19 +19,47 @@ function findLocationsInText(text) {
   const queryLower = text.toLowerCase();
   const matched = [];
 
-  // Check Indian districts
+  const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const checkMatch = (phrase) => {
+    if (!phrase || phrase.length < 3) return false;
+    const pattern = new RegExp(`\\b${escapeRegExp(phrase.toLowerCase())}\\b`, 'i');
+    return pattern.test(queryLower);
+  };
+
+  // 1. Check Indian districts & cities
   for (const d of INDIAN_DISTRICTS) {
-    const dNameLower = d.name.toLowerCase().split('(')[0].trim();
-    if (queryLower.includes(dNameLower)) {
-      matched.push(d);
+    const mainName = d.name.split('(')[0].trim();
+    const parenName = d.name.includes('(') ? d.name.split('(')[1].replace(')', '').trim() : '';
+
+    if (checkMatch(mainName) || (parenName && checkMatch(parenName))) {
+      if (!matched.some(m => m.id === d.id)) {
+        matched.push(d);
+      }
     }
   }
 
-  // Check World Capitals
+  // 2. Check World Capitals
   for (const c of WORLD_CAPITALS) {
-    const cNameLower = c.name.toLowerCase().split('(')[0].trim();
-    if (queryLower.includes(cNameLower) && !matched.some(m => m.id === c.id)) {
-      matched.push(c);
+    const mainName = c.name.split('(')[0].trim();
+    const parenName = c.name.includes('(') ? c.name.split('(')[1].replace(')', '').trim() : '';
+
+    if (checkMatch(mainName) || (parenName && checkMatch(parenName))) {
+      if (!matched.some(m => m.id === c.id)) {
+        matched.push(c);
+      }
+    }
+  }
+
+  // 3. Check State names if no direct district matched
+  if (matched.length === 0) {
+    for (const d of INDIAN_DISTRICTS) {
+      if (d.state && checkMatch(d.state)) {
+        if (!matched.some(m => m.id === d.id)) {
+          matched.push(d);
+          break;
+        }
+      }
     }
   }
 

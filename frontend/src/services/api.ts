@@ -464,6 +464,17 @@ const ALIASES: Record<string, string> = {
   'kashi': 'varanasi'
 };
 
+const STOP_WORDS = new Set([
+  'weather', 'forecast', 'today', 'tomorrow', 'tell', 'me', 'about', 'how', 'is',
+  'what', 'will', 'it', 'rain', 'raining', 'rains', 'snow', 'snowing', 'sunny',
+  'cloudy', 'hot', 'cold', 'warm', 'windy', 'humid', 'a', 'an', 'the', 'for', 'of',
+  'in', 'at', 'to', 'near', 'around', 'climate', 'temperature', 'temp', 'condition',
+  'conditions', 'compare', 'vs', 'and', 'please', 'give', 'info', 'information',
+  'report', 'now', 'current', 'right', 'should', 'i', 'wear', 'cloth', 'clothes',
+  'clothing', 'outfit', 'umbrella', 'farmer', 'agri', 'crop', 'irrigation',
+  'farming', 'advice', 'advisory', 'city', 'district', 'town', 'place'
+]);
+
 export function findLocationsInText(text: string): LocationItem[] {
   const queryLower = text.toLowerCase();
   const matched: LocationItem[] = [];
@@ -550,6 +561,91 @@ export function findLocationsInText(text: string): LocationItem[] {
   return matched;
 }
 
+function extractLocationCandidates(text: string): string[] {
+  const candidates: string[] = [];
+  const lower = text.toLowerCase();
+
+  const compareMatch = lower.match(/(?:compare|between)\s+([a-z\s]+?)\s+(?:and|vs|with)\s+([a-z\s]+)/i);
+  if (compareMatch) {
+    const c1 = compareMatch[1].split(/\s+/).filter(w => !STOP_WORDS.has(w)).join(' ');
+    const c2 = compareMatch[2].split(/\s+/).filter(w => !STOP_WORDS.has(w)).join(' ');
+    if (c1.length >= 2) candidates.push(c1);
+    if (c2.length >= 2) candidates.push(c2);
+  }
+
+  const prepMatches = lower.match(/(?:in|at|for|near|around|of|about)\s+([a-z\s]+?)(?:\s+(?:today|tomorrow|now|yesterday|forecast|weather|rain|temperature|this|next)|$)/gi);
+  if (prepMatches) {
+    for (const match of prepMatches) {
+      const clean = match.replace(/^(in|at|for|near|around|of|about)\s+/i, '').trim();
+      const filtered = clean.split(/\s+/).filter(w => !STOP_WORDS.has(w)).join(' ');
+      if (filtered.length >= 2) candidates.push(filtered);
+    }
+  }
+
+  if (candidates.length === 0) {
+    const words = text.replace(/[^a-zA-Z\s]/g, ' ').split(/\s+/).filter(w => w.length >= 2 && !STOP_WORDS.has(w.toLowerCase()));
+    if (words.length > 0) {
+      candidates.push(words.join(' '));
+      if (words.length > 1) {
+        words.forEach(w => candidates.push(w));
+      }
+    }
+  }
+
+  return Array.from(new Set(candidates));
+}
+
+async function geocodeLocationOnline(name: string): Promise<LocationItem | null> {
+  if (!name || name.length < 2) return null;
+  try {
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.results && data.results.length > 0) {
+      const r = data.results[0];
+      return {
+        id: `geo-${r.id}`,
+        name: r.name,
+        state: r.admin1 || r.country || '',
+        country: r.country || 'Global',
+        lat: r.latitude,
+        lon: r.longitude,
+        type: 'custom'
+      };
+    }
+  } catch (err) {}
+  return null;
+}
+
+export async function resolveTargetLocations(lastUserMsg: string, currentLocation?: LocationItem | null): Promise<LocationItem[]> {
+  // 1. Local dataset match
+  let targetLocations = findLocationsInText(lastUserMsg);
+
+  // 2. Open-Meteo Geocoding API for dynamic city lookup
+  if (targetLocations.length === 0) {
+    const candidates = extractLocationCandidates(lastUserMsg);
+    for (const candidate of candidates.slice(0, 2)) {
+      const geoLoc = await geocodeLocationOnline(candidate);
+      if (geoLoc && !targetLocations.some(t => Math.hypot(t.lat - geoLoc.lat, t.lon - geoLoc.lon) < 0.1)) {
+        targetLocations.push(geoLoc);
+      }
+    }
+  }
+
+  // 3. Fallback to current dashboard location or Bhopal
+  if (targetLocations.length === 0) {
+    if (currentLocation && currentLocation.lat && currentLocation.lon) {
+      targetLocations.push(currentLocation);
+    } else {
+      const bhopal = INDIAN_DISTRICTS.find(d => d.name.includes("Bhopal")) || INDIAN_DISTRICTS[0];
+      targetLocations.push(bhopal);
+    }
+  }
+
+  return targetLocations;
+}
+
 export async function sendChatMessage(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   currentLocation?: LocationItem | null
@@ -571,18 +667,8 @@ export async function sendChatMessage(
   const lastUserMsg = messages[messages.length - 1]?.content || "";
   const queryLower = lastUserMsg.toLowerCase();
 
-  // Extract target locations mentioned in user prompt
-  let targetLocations = findLocationsInText(lastUserMsg);
-
-  // Fallback to active UI location or default to Bhopal if no location mentioned in prompt
-  if (targetLocations.length === 0) {
-    if (currentLocation && currentLocation.lat && currentLocation.lon) {
-      targetLocations.push(currentLocation);
-    } else {
-      const bhopal = INDIAN_DISTRICTS.find(d => d.name.includes("Bhopal")) || INDIAN_DISTRICTS[0];
-      targetLocations.push(bhopal);
-    }
-  }
+  // Dynamically resolve target location(s) from local list OR live Open-Meteo geocoding
+  let targetLocations = await resolveTargetLocations(lastUserMsg, currentLocation);
 
   // Fetch real-time live Open-Meteo weather data for matched locations (up to 2 for comparisons)
   const weatherContexts: Array<{ location: string; locObj: LocationItem; weather: WeatherData }> = [];
@@ -602,7 +688,7 @@ export async function sendChatMessage(
 
   if (weatherContexts.length === 0) {
     return {
-      reply: "⚠️ I couldn't fetch live weather data for the specified location right now. Please try searching for a district in India (e.g. Bhopal, Manali, Jaipur, Delhi) or a world capital (e.g. Tokyo, Paris).",
+      reply: "⚠️ I couldn't fetch live weather data for the specified location right now. Please try searching for a city or district (e.g. Gwalior, Agra, Bhopal, Manali, Jaipur, Delhi, Tokyo).",
       locations: [],
       weatherData: []
     };
@@ -616,7 +702,7 @@ export async function sendChatMessage(
 
   let reply = "";
 
-  // Scenario A: Multi-location comparison (e.g. "Compare weather in Delhi and Tokyo")
+  // Scenario A: Multi-location comparison (e.g. "Compare Gwalior and Bhopal")
   if (weatherContexts.length >= 2) {
     const sec = weatherContexts[1];
     const sLoc = sec.location;

@@ -1,0 +1,318 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { ChatMessage, LocationItem } from '../types';
+import { sendChatMessage } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
+import { Send, Mic, MicOff, Bot, User, Sparkles, Volume2, RotateCcw, Loader2 } from 'lucide-react';
+
+interface ChatViewProps {
+  currentLocation: LocationItem | null;
+  initialPrompt?: string;
+}
+
+export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialPrompt }) => {
+  const { speechEnabled } = useTheme();
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 'welcome-1',
+      role: 'assistant',
+      content: `Hello! I am **WeatherGPT** 🌤️, your conversational weather assistant.\n\nYou can ask me natural language questions like:\n- *"Will it rain in Bhopal tomorrow?"*\n- *"Compare weather in Delhi and Tokyo"*\n- *"What should I wear in Manali today?"*\n- *"Agricultural weather advice for Punjab farmers"*`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  ]);
+  const [input, setInput] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  // Auto scroll to bottom
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isSending]);
+
+  // Handle initial prompt if redirected from Dashboard
+  useEffect(() => {
+    if (initialPrompt) {
+      handleSend(initialPrompt);
+    }
+  }, [initialPrompt]);
+
+  // Initialize Speech Recognition
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(transcript);
+        setIsListening(false);
+      };
+
+      recognition.onerror = () => {
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
+  }, []);
+
+  const toggleListen = () => {
+    if (!recognitionRef.current) {
+      alert("Web Speech API voice input is not supported in your browser.");
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  };
+
+  // Text-to-Speech reader
+  const speakText = (text: string) => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const cleanText = text.replace(/[*#_`|~]/g, '');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.0;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleSend = async (textToSend?: string) => {
+    const msgText = textToSend || input;
+    if (!msgText.trim() || isSending) return;
+
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: msgText.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    if (!textToSend) setInput('');
+    setIsSending(true);
+
+    try {
+      const history = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
+      const response = await sendChatMessage(history, currentLocation);
+
+      const aiMessage: ChatMessage = {
+        id: `ai-${Date.now()}`,
+        role: 'assistant',
+        content: response.reply,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        locations: response.locations,
+        weatherData: response.weatherData
+      };
+
+      setMessages(prev => [...prev, aiMessage]);
+
+      if (speechEnabled) {
+        speakText(response.reply);
+      }
+    } catch (err: any) {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `err-${Date.now()}`,
+          role: 'assistant',
+          content: '⚠️ I encountered an error retrieving weather information. Please make sure the backend server is running.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleClearHistory = () => {
+    setMessages([
+      {
+        id: 'welcome-1',
+        role: 'assistant',
+        content: 'Conversation history reset. How can I help with weather forecasts or climate insights?',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+    ]);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto h-[calc(100vh-160px)] flex flex-col glass-panel rounded-3xl border border-slate-700/60 shadow-2xl overflow-hidden">
+      
+      {/* Header Bar */}
+      <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-lg shadow-md">
+            🤖
+          </div>
+          <div>
+            <h2 className="text-base font-extrabold text-white flex items-center gap-2">
+              WeatherGPT Conversational AI
+              <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                Anthropic Proxy
+              </span>
+            </h2>
+            <p className="text-xs text-slate-400">
+              Natural Language Weather Assistant • Instant Live Data Summaries
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={handleClearHistory}
+          className="p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition text-xs flex items-center gap-1.5"
+          title="Reset Chat History"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Reset</span>
+        </button>
+      </div>
+
+      {/* Messages Stream */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+        {messages.map((msg) => {
+          const isUser = msg.role === 'user';
+          return (
+            <div
+              key={msg.id}
+              className={`flex gap-3 max-w-[88%] sm:max-w-[80%] ${isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'}`}
+            >
+              {/* Avatar */}
+              <div
+                className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs flex-shrink-0 ${
+                  isUser
+                    ? 'bg-gradient-to-tr from-indigo-500 to-purple-600 text-white'
+                    : 'bg-gradient-to-tr from-cyan-500 to-blue-600 text-white'
+                }`}
+              >
+                {isUser ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+              </div>
+
+              {/* Message Bubble */}
+              <div
+                className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                  isUser
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg'
+                    : 'glass-card text-slate-100 border border-slate-700/60'
+                }`}
+              >
+                <div className="whitespace-pre-wrap font-sans">
+                  {msg.content}
+                </div>
+
+                {/* Optional TTS Audio button for Assistant */}
+                {!isUser && (
+                  <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                    <span>{msg.timestamp}</span>
+                    <button
+                      onClick={() => speakText(msg.content)}
+                      className="hover:text-cyan-400 flex items-center gap-1 transition"
+                      title="Read aloud"
+                    >
+                      <Volume2 className="w-3 h-3" /> Read Aloud
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {isSending && (
+          <div className="flex gap-3 max-w-[80%] mr-auto items-center text-slate-400 text-xs">
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+              <Loader2 className="w-4 h-4 animate-spin" />
+            </div>
+            <div className="glass-card px-4 py-2.5 rounded-2xl animate-pulse">
+              Analyzing query & querying live weather API...
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Suggested Prompts Banner */}
+      <div className="px-4 py-2 border-t border-slate-800 bg-slate-900/40 flex items-center gap-2 overflow-x-auto text-xs whitespace-nowrap">
+        <Sparkles className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+        <span className="text-slate-400 font-semibold">Try:</span>
+        <button
+          onClick={() => handleSend("Will it rain in Bhopal tomorrow?")}
+          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+        >
+          Will it rain in Bhopal tomorrow?
+        </button>
+        <button
+          onClick={() => handleSend("Compare weather in Delhi and Tokyo")}
+          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+        >
+          Compare Delhi & Tokyo
+        </button>
+        <button
+          onClick={() => handleSend("What should I wear in Manali today?")}
+          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+        >
+          Clothing advice for Manali
+        </button>
+      </div>
+
+      {/* Input Box Bar */}
+      <div className="p-4 bg-slate-900/80 border-t border-slate-800">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSend();
+          }}
+          className="flex items-center gap-2"
+        >
+          {/* Voice Input Button */}
+          <button
+            type="button"
+            onClick={toggleListen}
+            className={`p-3 rounded-2xl border transition ${
+              isListening
+                ? 'bg-rose-500/20 border-rose-500 text-rose-400 animate-pulse'
+                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-cyan-400'
+            }`}
+            title={isListening ? "Listening... click to stop" : "Click to speak query"}
+          >
+            {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+          </button>
+
+          {/* Text Input */}
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={isListening ? "Listening... speak now!" : "Ask WeatherGPT any weather question..."}
+            className="flex-1 bg-slate-950/90 text-white placeholder-slate-500 text-sm rounded-2xl px-4 py-3 border border-slate-700/80 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30 transition"
+          />
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={!input.trim() || isSending}
+            className="p-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-lg transition"
+          >
+            <Send className="w-5 h-5" />
+          </button>
+        </form>
+      </div>
+
+    </div>
+  );
+};

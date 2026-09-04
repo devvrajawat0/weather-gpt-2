@@ -1,178 +1,113 @@
-# ⛈️ WeatherGPT — AI-Powered Weather Assistant
+# WeatherGPT — Conversational AI for Weather Forecasting, Alerts, and Climate Information
 
-> **SIH 2026 | Problem Statement: SIH26068** | Ministry of Earth Sciences (MoES) | Theme: Disaster Management
+> **Smart India Hackathon Problem Statement SIH26068**
 
-WeatherGPT is a conversational AI system that provides weather forecasts, delivers timely disaster alerts, and makes complex climate data accessible through an intuitive chat interface.
-
-![Tech Stack](https://img.shields.io/badge/React-18-blue) ![Node](https://img.shields.io/badge/Node.js-Express-green) ![AI](https://img.shields.io/badge/AI-Gemini%202.0-orange) ![Weather](https://img.shields.io/badge/Data-OpenWeatherMap-yellow)
+WeatherGPT is a full-stack, production-ready web application combining real-time weather forecasting, IMD-style severe weather alerts, comprehensive air quality indexing (AQI), static location databases (700+ Indian districts & 195+ world capitals), and a natural-language conversational AI assistant equipped with voice interaction and speech synthesis.
 
 ---
 
-## 🚀 Features
+## 🌟 Key Features
 
-### 🤖 AI Chat Assistant
-- Natural language weather queries ("Will it rain in Mumbai tomorrow?")
-- Context-aware responses grounded in real weather data
-- Practical advice and safety tips
-- Conversation memory for follow-up questions
+1. **Conversational AI Weather Assistant (`/api/chat`)**
+   - Natural language query understanding ("Will it rain in Bhopal tomorrow?", "Compare weather in Delhi and Tokyo").
+   - Proxies requests to Anthropic Claude API with real-time weather context injection.
+   - Built-in **Intelligent Fallback AI Engine** ensuring 100% functionality out-of-the-box even without an API key.
+   - Supports both **Voice Speech Input** (Web Speech API) and **Text-to-Speech (TTS)** output toggle.
 
-### 📊 Weather Dashboard
-- Real-time current conditions (temperature, humidity, wind, pressure)
-- 5-day forecast with interactive charts
-- Hourly forecast breakdown
-- Interactive weather map (Leaflet.js)
+2. **Real Live Weather Data & Air Quality Index**
+   - Live weather forecasts powered by **Open-Meteo API** (No API key required!).
+   - Comprehensive parameters: Temperature, Feels-like, Wind Speed & Direction, Humidity, Pressure, Precipitation, UV Index, Sunrise/Sunset, and 7-day temperature trends.
+   - Real-time AQI metrics: US AQI, PM2.5, PM10, Nitrogen Dioxide (NO2), Ozone (O3), Sulphur Dioxide (SO2).
 
-### 🚨 Disaster Alerts
-- Real-time weather warnings (cyclones, heatwaves, floods)
-- Color-coded severity levels (Red/Orange/Yellow/Green)
-- Safety instructions for each alert type
-- Location-based alert filtering
+3. **Complete Static Dataset Coverage (Zero Geocoding Latency)**
+   - Includes all **700+ Indian Districts** grouped by State/UT.
+   - Includes all **195+ World Country Capital Cities**.
+   - Instant search autocomplete and filterable Explorer.
 
-### 🎨 Modern UI/UX
-- Dark mode by default with light mode toggle
-- Glassmorphism design with smooth animations
-- Fully responsive (mobile + desktop)
-- Beautiful data visualizations
+4. **IMD Severe Weather Alert System**
+   - Live color-coded alerts (**Red**, **Orange**, **Yellow**, **Green**) covering Heatwaves, Heavy Rainfall/Floods, Cyclones/Squalls, Thunderstorms, and Air Pollution.
+   - Actionable disaster safety guidelines and emergency helpline contacts.
 
----
-
-## 📋 Prerequisites
-
-Before you begin, you need to install:
-
-1. **Node.js** (v18 or later) — [Download here](https://nodejs.org/)
-2. **Git** (optional) — [Download here](https://git-scm.com/)
-
-And sign up for these **FREE** API keys:
-
-1. **OpenWeatherMap API Key** — [Sign up here](https://openweathermap.org/api) (Free tier: 1000 calls/day)
-2. **Google Gemini API Key** — [Get it here](https://aistudio.google.com/apikey) (Free tier available)
+5. **Apple-Weather & Windy Inspired Design**
+   - Adaptive dynamic gradient backgrounds reflecting current conditions (sunny, rainy, cloudy, night, stormy, snowy).
+   - Glassmorphism UI components, responsive layout across Mobile, Tablet, and Desktop.
+   - Built-in **Dark Mode** toggle.
+   - Interactive **Leaflet Map** centered on selected location.
 
 ---
 
-## ⚡ Quick Start
+## 🏗️ Architecture & Tech Stack
 
-### Step 1: Install Node.js
-Download and install from [https://nodejs.org/](https://nodejs.org/) (choose LTS version).
-After installation, verify by opening a new terminal:
+```
+WeatherGPT Monorepo
+├── /backend            # Node.js + Express API Server
+│   ├── /src/data       # Static Datasets (Districts & Capitals)
+│   ├── /src/services   # Weather, Alert & AI Service Layer
+│   └── /src/routes     # Express Route Handlers
+└── /frontend           # React + TypeScript + Vite + Tailwind CSS
+    ├── /src/components # Glassmorphism UI Components & Leaflet Map
+    ├── /src/views      # Dashboard, Chat, Explorer, Alerts Views
+    └── /src/context    # Dark Mode & Speech Context
+```
+
+* **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, Lucide React, Leaflet (`react-leaflet`), TanStack React Query, Web Speech API.
+* **Backend**: Node.js, Express, `@anthropic-ai/sdk`, `node-cache` (15-min TTL), `express-rate-limit`, `cors`.
+
+---
+
+## 🚀 Quick Start Guide
+
+### Prerequisites
+* Node.js v18+ and npm installed.
+
+### 1. Installation
+Clone the repository and install dependencies across the monorepo:
+
 ```bash
-node --version
-npm --version
+# Install all root, backend, and frontend dependencies
+npm run install:all
 ```
 
-### Step 2: Set up API Keys
-Copy the environment template and add your keys:
-```bash
-copy .env.example .env
-```
-Then open `.env` in any text editor and replace the placeholder values:
-```
-OPENWEATHER_API_KEY=your_actual_key_here
-GEMINI_API_KEY=your_actual_key_here
-```
-
-### Step 3: Install Dependencies
+Alternatively:
 ```bash
 npm install
-cd server && npm install
-cd ../client && npm install
+cd backend && npm install
+cd ../frontend && npm install
 cd ..
 ```
 
-### Step 4: Run the App
+### 2. Environment Configuration
+Create a `.env` file inside `/backend` (or copy `.env.example`):
+
+```env
+PORT=5000
+ANTHROPIC_API_KEY=your_optional_anthropic_api_key
+```
+
+> **Note**: If `ANTHROPIC_API_KEY` is omitted, WeatherGPT automatically uses its built-in Intelligent Fallback AI Weather Engine to synthesize data-backed answers!
+
+### 3. Run Locally (Concurrent Launch)
+Launch both frontend (Vite on `http://localhost:3000`) and backend (Express on `http://localhost:5000`) concurrently:
+
 ```bash
 npm run dev
 ```
-This starts both the backend (port 5000) and frontend (port 5173).
 
-### Step 5: Open in Browser
-Visit: **http://localhost:5173**
-
----
-
-## 📁 Project Structure
-
-```
-weathergpt/
-├── client/                    # React Frontend
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Chat/          # AI chat interface
-│   │   │   ├── Dashboard/     # Weather dashboard
-│   │   │   ├── Alerts/        # Disaster alerts
-│   │   │   ├── Layout/        # Navbar, Sidebar, Footer
-│   │   │   └── Common/        # Shared components
-│   │   ├── pages/             # Page components
-│   │   ├── hooks/             # Custom React hooks
-│   │   ├── services/          # API client
-│   │   └── utils/             # Helper functions
-│   └── ...config files
-│
-├── server/                    # Node.js Backend
-│   ├── controllers/           # Route handlers
-│   ├── services/              # Business logic
-│   │   ├── geminiService.js   # Google Gemini AI
-│   │   ├── weatherService.js  # OpenWeatherMap API
-│   │   └── alertService.js    # Alert generation
-│   ├── models/                # Database (SQLite)
-│   ├── routes/                # Express routes
-│   ├── middleware/             # Error handling, rate limiting
-│   └── server.js              # Entry point
-│
-├── .env.example               # Environment template
-└── package.json               # Root scripts
-```
+Open your browser and navigate to:
+👉 `http://localhost:3000`
 
 ---
 
-## 🔌 API Endpoints
+## 🧪 Testing Verification & Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/chat` | Send message to AI assistant |
-| GET | `/api/chat/history/:sessionId` | Get chat history |
-| GET | `/api/weather/current?city=Mumbai` | Current weather |
-| GET | `/api/weather/forecast?city=Mumbai` | 5-day forecast |
-| GET | `/api/weather/hourly?city=Mumbai` | Hourly forecast |
-| GET | `/api/weather/air-quality?lat=xx&lon=yy` | Air quality |
-| GET | `/api/alerts?city=Mumbai` | Weather alerts |
-| GET | `/api/alerts/recent` | Recent alert log |
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `GET /api/weather/forecast?lat=...&lon=...` | GET | Returns live weather, 7-day forecast, AQI, and alerts. |
+| `GET /api/weather/alerts` | GET | Returns live IMD-style severe weather warnings. |
+| `GET /api/locations/search?q=bhopal` | GET | Instant autocomplete over 700+ districts & 195+ capitals. |
+| `POST /api/chat` | POST | WeatherGPT Conversational AI endpoint. |
 
 ---
 
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18 + Vite + Tailwind CSS v4 |
-| Backend | Node.js + Express.js |
-| AI Engine | Google Gemini 2.0 Flash |
-| Weather Data | OpenWeatherMap API |
-| Database | SQLite (better-sqlite3) |
-| Charts | Recharts |
-| Maps | Leaflet.js + React-Leaflet |
-| Animations | Framer Motion |
-| Icons | Lucide React |
-
----
-
-## 🏆 What Makes This Stand Out
-
-1. **Context-Aware AI** — Not just an API wrapper. The AI receives real weather data and provides intelligent analysis
-2. **Hallucination Prevention** — AI is grounded in actual API data, not making up numbers
-3. **Interactive Weather Map** — Leaflet-based map with weather overlays
-4. **Smart Disaster Alerts** — Auto-generated from weather conditions with severity classification
-5. **Data Visualization** — Beautiful charts showing temperature trends and patterns
-6. **Responsive Design** — Works seamlessly on desktop and mobile
-
----
-
-## 👥 Team
-
-Built for **Smart India Hackathon 2026** — Internal Hackathon Round
-
----
-
-## 📄 License
-
-MIT License — Free to use and modify
+## 📜 Disclaimer
+Forecasts, AI responses, and advice in WeatherGPT are provided for informational purposes. For official emergency declarations, always consult the **India Meteorological Department (IMD)** or local government warnings.

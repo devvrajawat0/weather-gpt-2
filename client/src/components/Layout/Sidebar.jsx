@@ -1,42 +1,36 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { MapPin, Navigation } from 'lucide-react';
 
 const cities = [
   'Mumbai', 'Delhi', 'Bangalore', 'Chennai', 
-  'Kolkata', 'Hyderabad', 'Pune', 'Jaipur'
+  'Kolkata', 'Hyderabad', 'Pune', 'Jaipur', 'Bhopal', 'Tokyo', 'London', 'New York'
 ];
 
-const Sidebar = () => {
+const Sidebar = ({ onSelectCity }) => {
+  const navigate = useNavigate();
+
+  const handleCityClick = (city) => {
+    if (onSelectCity) onSelectCity(city);
+    navigate(`/dashboard?city=${encodeURIComponent(city)}`);
+  };
+
   return (
-    <aside className="hidden md:flex flex-col w-64 glass-panel border-r border-white/10 h-full">
-      <div className="p-4">
-        <button className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white py-2 rounded-xl transition-all shadow-lg shadow-cyan-500/20 font-medium text-sm">
-          <Navigation size={16} />
-          Current Location
-        </button>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+    <aside className="w-full glass-panel border-r border-white/10 h-full rounded-2xl p-4 flex flex-col space-y-4">
+      <div className="flex-1 overflow-y-auto">
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
           Popular Cities
         </h3>
         <div className="space-y-1">
           {cities.map((city) => (
-            <NavLink
+            <button
               key={city}
-              to={`/dashboard?city=${city}`}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
-                  isActive 
-                    ? 'bg-white/10 text-cyan-400 shadow-sm' 
-                    : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                }`
-              }
+              onClick={() => handleCityClick(city)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-300 hover:bg-white/10 hover:text-white transition-all text-left"
             >
-              <MapPin size={16} className={({ isActive }) => isActive ? 'text-cyan-400' : 'text-gray-500'} />
-              {city}
-            </NavLink>
+              <MapPin size={16} className="text-cyan-400" />
+              <span>{city}</span>
+            </button>
           ))}
         </div>
       </div>

@@ -3,45 +3,46 @@ const weatherService = require('../services/weatherService');
 module.exports = {
   getCurrentWeather: async (req, res, next) => {
     try {
-      const { city, lat, lon } = req.query;
-      if (city) {
-        const data = await weatherService.getCurrentWeather(city);
-        return res.json(data);
-      } else if (lat && lon) {
-        const data = await weatherService.getWeatherByCoords(lat, lon);
-        return res.json(data);
+      const { city, lat, lon, q } = req.query;
+      let query = city || q;
+      if (!query && lat && lon) {
+        query = `${lat},${lon}`;
       }
-      res.status(400).json({ error: 'Provide city or lat/lon' });
+      if (!query) {
+        query = 'Delhi';
+      }
+      const data = await weatherService.getWeatherData(query);
+      return res.json(data);
     } catch (error) {
       next(error);
     }
   },
   getForecast: async (req, res, next) => {
     try {
-      const { city } = req.query;
-      if (!city) return res.status(400).json({ error: 'City is required' });
-      const data = await weatherService.getForecast(city);
-      res.json(data);
+      const { city, q } = req.query;
+      const query = city || q || 'Delhi';
+      const data = await weatherService.getWeatherData(query);
+      res.json(data.daily || []);
     } catch (error) {
       next(error);
     }
   },
   getHourly: async (req, res, next) => {
     try {
-      const { city } = req.query;
-      if (!city) return res.status(400).json({ error: 'City is required' });
-      const data = await weatherService.getHourlyForecast(city);
-      res.json(data);
+      const { city, q } = req.query;
+      const query = city || q || 'Delhi';
+      const data = await weatherService.getWeatherData(query);
+      res.json(data.hourly || []);
     } catch (error) {
       next(error);
     }
   },
-  getAirQuality: async (req, res, next) => {
+  searchLocations: async (req, res, next) => {
     try {
-      const { lat, lon } = req.query;
-      if (!lat || !lon) return res.status(400).json({ error: 'lat and lon are required' });
-      const data = await weatherService.getAirQuality(lat, lon);
-      res.json(data);
+      const { q } = req.query;
+      if (!q) return res.json([]);
+      const locations = await weatherService.searchLocations(q);
+      res.json(locations);
     } catch (error) {
       next(error);
     }

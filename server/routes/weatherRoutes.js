@@ -5,6 +5,6 @@ const weatherController = require('../controllers/weatherController');
 router.get('/current', weatherController.getCurrentWeather);
 router.get('/forecast', weatherController.getForecast);
 router.get('/hourly', weatherController.getHourly);
-router.get('/air-quality', weatherController.getAirQuality);
+router.get('/search', weatherController.searchLocations);
 
 module.exports = router;

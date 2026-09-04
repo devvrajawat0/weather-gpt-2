@@ -1,65 +1,52 @@
 import { useState, useCallback } from 'react';
-import { sendChatMessage } from '../services/api';
+import { askWeatherGPT } from '../services/chatService';
 
-export const useChat = () => {
+export const useChat = (weatherData = null, unit = 'C') => {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState(null);
 
   const sendMessage = useCallback(async (text) => {
-    if (!text.trim()) return;
+    if (!text || !text.trim()) return;
 
-    const userMessage = {
+    const userMsg = {
       id: Date.now().toString(),
       role: 'user',
       content: text,
       timestamp: new Date().toISOString()
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
 
     try {
-      // Mocking for now, adjust based on actual backend response format
-      const response = await sendChatMessage(text, sessionId).catch(() => ({
-        reply: "Sorry, I couldn't connect to the server right now.",
-        sessionId: sessionId || "temp-session"
-      }));
-
-      const aiMessage = {
+      const replyText = await askWeatherGPT(text, weatherData, unit, messages);
+      const aiMsg = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: response.reply,
-        weatherData: response.weatherData,
+        content: replyText,
+        weatherData: weatherData,
         timestamp: new Date().toISOString()
       };
-
-      if (response.sessionId && !sessionId) {
-        setSessionId(response.sessionId);
-      }
-
-      setMessages(prev => [...prev, aiMessage]);
-    } catch (error) {
+      setMessages(prev => [...prev, aiMsg]);
+    } catch (err) {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: "Error communicating with AI service.",
+        content: 'I had trouble answering that. Please verify your connection or try again!',
         timestamp: new Date().toISOString()
       }]);
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId]);
+  }, [weatherData, unit, messages]);
 
   const clearChat = useCallback(() => {
     setMessages([]);
-    setSessionId(null);
   }, []);
 
   return {
     messages,
     isLoading,
-    sessionId,
     sendMessage,
     clearChat
   };

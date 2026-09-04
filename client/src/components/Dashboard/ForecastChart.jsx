@@ -1,86 +1,101 @@
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { formatTemp, getWeatherIcon } from '../../utils/helpers';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
+import { Calendar, Umbrella } from 'lucide-react';
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    return (
-      <div className="bg-slate-800 border border-white/10 p-3 rounded-xl shadow-xl">
-        <p className="font-semibold text-white mb-1">{data.fullDate}</p>
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">{getWeatherIcon(data.icon)}</span>
-          <div>
-            <p className="text-cyan-400 font-bold">{formatTemp(data.temp)}</p>
-            <p className="text-xs text-gray-400 capitalize">{data.desc}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  return null;
-};
+const ForecastChart = ({ data, unit = 'C' }) => {
+  if (!data || data.length === 0) return null;
 
-const ForecastChart = ({ data }) => {
-  if (!data || data.length === 0) {
-    return <div className="h-full flex items-center justify-center text-gray-500">No forecast data available</div>;
-  }
+  const chartData = data.map(item => ({
+    name: item.day_name || item.date,
+    Max: unit === 'F' ? Math.round(item.max_temp_f) : Math.round(item.max_temp_c),
+    Min: unit === 'F' ? Math.round(item.min_temp_f) : Math.round(item.min_temp_c),
+    Rain: item.chance_of_rain || 0,
+    condition: item.condition
+  }));
 
-  // Process data for the chart (taking one reading per day, usually around noon)
-  const chartData = data
-    .filter((item, index) => index % 8 === 0 || index === 0)
-    .slice(0, 5)
-    .map(item => {
-      const date = new Date(item.dt * 1000);
-      return {
-        name: date.toLocaleDateString('en-US', { weekday: 'short' }),
-        fullDate: date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }),
-        temp: Math.round(item.main.temp),
-        temp_min: Math.round(item.main.temp_min),
-        temp_max: Math.round(item.main.temp_max),
-        icon: item.weather[0].icon,
-        desc: item.weather[0].description
-      };
-    });
+  const unitSymbol = `°${unit}`;
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex-1 min-h-[250px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-            <defs>
-              <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.5}/>
-                <stop offset="95%" stopColor="#22d3ee" stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-            <XAxis dataKey="name" stroke="#94a3b8" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-            <YAxis stroke="#94a3b8" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(val) => `${val}°`} />
-            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, strokeDasharray: '5 5' }} />
-            <Area 
-              type="monotone" 
-              dataKey="temp" 
-              stroke="#22d3ee" 
-              strokeWidth={3}
-              fillOpacity={1} 
-              fill="url(#colorTemp)" 
-              activeDot={{ r: 6, fill: "#22d3ee", stroke: "#0f172a", strokeWidth: 2 }}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+    <div className="space-y-6">
+      {/* Chart Section */}
+      <div className="glass-panel p-5 rounded-2xl border border-white/10 space-y-3">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-2 text-gray-300 font-semibold text-sm">
+            <Calendar size={18} className="text-cyan-400" />
+            <span>7-Day Temperature Trend ({unitSymbol})</span>
+          </div>
+          <span className="text-xs text-gray-400">High / Low Forecast</span>
+        </div>
+
+        <div className="h-56 w-full pt-2">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="maxGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.4}/>
+                  <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
+                </linearGradient>
+                <linearGradient id="minGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#818cf8" stopOpacity={0.4}/>
+                  <stop offset="95%" stopColor="#818cf8" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} />
+              <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} domain={['dataMin - 3', 'dataMax + 3']} />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: 'rgba(15, 23, 42, 0.9)', 
+                  borderColor: 'rgba(255, 255, 255, 0.2)', 
+                  borderRadius: '12px',
+                  color: '#fff' 
+                }} 
+              />
+              <Area type="monotone" dataKey="Max" stroke="#38bdf8" strokeWidth={3} fillOpacity={1} fill="url(#maxGrad)" />
+              <Area type="monotone" dataKey="Min" stroke="#818cf8" strokeWidth={2} strokeDasharray="3 3" fillOpacity={1} fill="url(#minGrad)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-2 mt-4 pt-4 border-t border-white/10">
-        {chartData.map((day, idx) => (
-          <div key={idx} className="flex flex-col items-center justify-center p-2 rounded-lg hover:bg-white/5 transition-colors cursor-default">
-            <span className="text-xs text-gray-400 font-medium mb-1">{day.name}</span>
-            <span className="text-xl mb-1">{getWeatherIcon(day.icon)}</span>
-            <div className="flex items-center gap-1 text-sm">
-              <span className="font-bold">{day.temp_max}°</span>
-            </div>
-          </div>
-        ))}
+      {/* Daily Cards Section */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-semibold uppercase text-gray-400 tracking-wider">7-Day Daily Breakdown</h4>
+        <div className="grid grid-cols-1 gap-2">
+          {data.map((day, idx) => {
+            const max = unit === 'F' ? Math.round(day.max_temp_f) : Math.round(day.max_temp_c);
+            const min = unit === 'F' ? Math.round(day.min_temp_f) : Math.round(day.min_temp_c);
+
+            return (
+              <div 
+                key={idx}
+                className="glass-panel px-4 py-3 rounded-xl border border-white/10 flex items-center justify-between hover:bg-white/10 transition-colors"
+              >
+                <div className="flex items-center gap-3 w-32">
+                  {day.icon && (
+                    <img src={day.icon} alt={day.condition} className="w-8 h-8" />
+                  )}
+                  <div>
+                    <p className="font-semibold text-sm text-white">{idx === 0 ? 'Today' : day.day_name}</p>
+                    <p className="text-[11px] text-gray-400 truncate max-w-[90px]">{day.condition}</p>
+                  </div>
+                </div>
+
+                {day.chance_of_rain > 0 && (
+                  <div className="flex items-center gap-1 text-xs text-cyan-300 bg-cyan-500/10 px-2 py-1 rounded-md border border-cyan-500/20">
+                    <Umbrella size={12} />
+                    <span>{day.chance_of_rain}% rain</span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 text-sm font-semibold">
+                  <span className="text-cyan-300">{max}°</span>
+                  <span className="text-gray-500">/</span>
+                  <span className="text-indigo-300">{min}°</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

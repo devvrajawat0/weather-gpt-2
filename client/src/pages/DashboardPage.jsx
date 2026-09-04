@@ -1,24 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import WeatherDashboard from '../components/Dashboard/WeatherDashboard';
+import WhyWeatherGPT from '../components/Common/WhyWeatherGPT';
 
 const DashboardPage = () => {
-  const location = useLocation();
-  const [initialCity, setInitialCity] = useState('Delhi');
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const cityParam = params.get('city');
-    if (cityParam) {
-      setInitialCity(cityParam);
-    }
-  }, [location.search]);
+  const [searchParams] = useSearchParams();
+  const cityParam = searchParams.get('city') || 'Delhi';
 
   return (
-    <div className="p-4 md:p-6 h-full overflow-y-auto">
-      <div className="max-w-7xl mx-auto">
-        <WeatherDashboard initialCity={initialCity} />
-      </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <WeatherDashboard initialCity={cityParam} />
+      <WhyWeatherGPT />
     </div>
   );
 };

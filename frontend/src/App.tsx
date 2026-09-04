@@ -111,6 +111,10 @@ const WeatherGPTApp: React.FC = () => {
             <ChatView
               currentLocation={selectedLocation}
               initialPrompt={chatPrompt}
+              onSelectLocation={(loc) => {
+                handleSelectLocation(loc);
+                setActiveView('dashboard');
+              }}
             />
           )}
 

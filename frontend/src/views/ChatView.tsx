@@ -2,20 +2,21 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, LocationItem } from '../types';
 import { sendChatMessage } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
-import { Send, Mic, MicOff, Bot, User, Sparkles, Volume2, RotateCcw, Loader2 } from 'lucide-react';
+import { Send, Mic, MicOff, Bot, User, Sparkles, Volume2, RotateCcw, Loader2, MapPin, ArrowRight } from 'lucide-react';
 
 interface ChatViewProps {
   currentLocation: LocationItem | null;
   initialPrompt?: string;
+  onSelectLocation?: (location: LocationItem) => void;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialPrompt }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialPrompt, onSelectLocation }) => {
   const { speechEnabled } = useTheme();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome-1',
       role: 'assistant',
-      content: `Hello! I am **WeatherGPT** 🌤️, your conversational weather assistant.\n\nYou can ask me natural language questions like:\n- *"Will it rain in Bhopal tomorrow?"*\n- *"Compare weather in Delhi and Tokyo"*\n- *"What should I wear in Manali today?"*\n- *"Agricultural weather advice for Punjab farmers"*`,
+      content: `Hello! I am **WeatherGPT** 🌤️, your conversational weather assistant.\n\nYou can ask me natural language questions for any city worldwide, like:\n- *"Will it rain in Gwalior tomorrow?"*\n- *"What is the weather in Agra today?"*\n- *"Compare Gwalior and Bhopal"*\n- *"What should I wear in Manali today?"*\n- *"Agricultural weather advice for Punjab farmers"*`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -130,7 +131,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialProm
         {
           id: `err-${Date.now()}`,
           role: 'assistant',
-          content: '⚠️ I encountered an error retrieving weather information. Please make sure the backend server is running.',
+          content: '⚠️ I encountered an error retrieving weather information. Please make sure your network connection is active.',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
@@ -163,11 +164,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialProm
             <h2 className="text-base font-extrabold text-white flex items-center gap-2">
               WeatherGPT Conversational AI
               <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                Anthropic Proxy
+                100% City Coverage
               </span>
             </h2>
             <p className="text-xs text-slate-400">
-              Natural Language Weather Assistant • Instant Live Data Summaries
+              Natural Language Weather Assistant • All Districts & Global Geocoding
             </p>
           </div>
         </div>
@@ -213,6 +214,25 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentLocation, initialProm
                 <div className="whitespace-pre-wrap font-sans">
                   {msg.content}
                 </div>
+
+                {/* Optional Interactive Location Cards to sync with Dashboard */}
+                {!isUser && msg.locations && msg.locations.length > 0 && onSelectLocation && (
+                  <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-cyan-400" /> View on Dashboard:
+                    </span>
+                    {msg.locations.map((loc) => (
+                      <button
+                        key={loc.id || loc.name}
+                        onClick={() => onSelectLocation(loc)}
+                        className="px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 text-xs font-semibold transition flex items-center gap-1.5 shadow-sm group"
+                      >
+                        <span>📍 Open {loc.name} Dashboard</span>
+                        <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Optional TTS Audio button for Assistant */}
                 {!isUser && (
